@@ -9,5 +9,5 @@ name = "fastxlsx"
 crate-type = ["cdylib"]
 
 [dependencies.pyo3]
-version = "0.23"
+version = "0.24"
 features = ["abi3-py38"]
