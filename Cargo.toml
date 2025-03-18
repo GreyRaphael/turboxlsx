@@ -8,6 +8,10 @@ edition = "2021"
 name = "fastxlsx"
 crate-type = ["cdylib"]
 
+[dependencies]
+quick-xml = "0.37"
+zip = "2.4"
+
 [dependencies.pyo3]
 version = "0.24"
 features = ["abi3-py38"]
