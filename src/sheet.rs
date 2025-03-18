@@ -5,6 +5,7 @@ use quick_xml::Writer;
 pub enum CellData {
     String(String),
     Number(f64),
+    Bool(bool),
 }
 
 pub struct SheetWriter {
@@ -54,7 +55,6 @@ impl SheetWriter {
 
                 let mut cell = BytesStart::new("c");
                 cell.push_attribute(("r", cell_ref.as_str()));
-                cell.push_attribute(("t", "inlineStr"));
 
                 writer.write_event(Event::Start(cell))?;
                 writer.write_event(Event::Start(BytesStart::new("is")))?;
@@ -84,9 +84,9 @@ impl SheetWriter {
                     let mut cell = BytesStart::new("c");
                     cell.push_attribute(("r", cell_ref.as_str()));
 
-                    writer.write_event(Event::Start(cell))?;
                     match cell_data {
                         CellData::String(s) => {
+                            writer.write_event(Event::Start(cell))?;
                             writer.write_event(Event::Start(BytesStart::new("is")))?;
                             writer.write_event(Event::Start(BytesStart::new("t")))?;
                             writer.write_event(Event::Text(BytesText::new(s)))?;
@@ -94,8 +94,16 @@ impl SheetWriter {
                             writer.write_event(Event::End(BytesEnd::new("is")))?;
                         }
                         CellData::Number(n) => {
+                            writer.write_event(Event::Start(cell))?;
                             writer.write_event(Event::Start(BytesStart::new("v")))?;
                             writer.write_event(Event::Text(BytesText::new(&n.to_string())))?;
+                            writer.write_event(Event::End(BytesEnd::new("v")))?;
+                        }
+                        CellData::Bool(b) => {
+                            cell.push_attribute(("t", "b"));
+                            writer.write_event(Event::Start(cell))?;
+                            writer.write_event(Event::Start(BytesStart::new("v")))?;
+                            writer.write_event(Event::Text(BytesText::new(&format!("{}", if *b { 1 } else { 0 }))))?;
                             writer.write_event(Event::End(BytesEnd::new("v")))?;
                         }
                     }

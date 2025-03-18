@@ -38,6 +38,11 @@ impl BookWriter {
         self.add_column(sheet_idx, cell_series);
     }
 
+    fn add_column_bool(&mut self, sheet_idx: usize, series: Vec<bool>) {
+        let cell_series: Vec<CellData> = series.into_iter().map(CellData::Bool).collect();
+        self.add_column(sheet_idx, cell_series);
+    }
+
     fn save(&mut self) {
         self.write_content_types().expect("fail to write: [Content_Types].xml");
         self.write_root_rels().expect("fail to write: _rels/.rels");
