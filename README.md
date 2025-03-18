@@ -1,11 +1,11 @@
-# fastxlsx
+# turboxlsx
 
 high performance python library to write xlsx file by rust pyo3
 
 ## Usage
 
 ```py
-from fastxlsx import BookWriter
+from turboxlsx import BookWriter
 
 book = BookWriter(name="test.xlsx")
 

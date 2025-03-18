@@ -4,7 +4,7 @@ mod sheet;
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn fastxlsx(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn turboxlsx(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<book::BookWriter>()?;
     Ok(())
 }
