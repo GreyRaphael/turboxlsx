@@ -1,5 +1,7 @@
 # turboxlsx
 
+[![pypi](https://img.shields.io/pypi/v/turboxlsx.svg)](https://pypi.org/project/turboxlsx/)  [![support-version](https://img.shields.io/pypi/pyversions/turboxlsx)](https://img.shields.io/pypi/pyversions/turboxlsx) [![commit](https://img.shields.io/github/last-commit/GreyRaphael/turboxlsx)](https://github.com/GreyRaphael/turboxlsx/commits/master)
+
 high performance python library to write xlsx file by rust pyo3
 
 ## Usage

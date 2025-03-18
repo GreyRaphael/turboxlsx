@@ -13,3 +13,7 @@ classifiers = [
 dynamic = ["version"]
 [tool.maturin]
 features = ["pyo3/extension-module"]
+
+[project.urls]
+Repository = "https://github.com/GreyRaphael/turboxlsx"
+Changelog = "https://github.com/GreyRaphael/turboxlsx/releases"
