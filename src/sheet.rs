@@ -29,7 +29,8 @@ impl SheetWriter {
     }
 
     pub fn generate_xml(&self) -> Result<Vec<u8>, std::io::Error> {
-        let mut writer = Writer::new(Vec::new());
+        // Preallocate 128 M
+        let mut writer = Writer::new(Vec::with_capacity(128 * 1024 * 1024));
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
 
         let mut root = BytesStart::new("worksheet");
@@ -39,6 +40,8 @@ impl SheetWriter {
 
         writer.write_event(Event::Start(BytesStart::new("sheetData")))?;
 
+        // Precompute column letters
+        let column_letters: Vec<String> = (0..self.columns.len()).map(|col_idx| column_index_to_letter(col_idx)).collect();
         // Write headers if present
         let mut header_offset = 2;
 
@@ -50,11 +53,8 @@ impl SheetWriter {
             writer.write_event(Event::Start(row))?;
 
             for (col_idx, header) in self.headers.iter().enumerate() {
-                let col_letter = column_index_to_letter(col_idx);
-                let cell_ref = format!("{}1", col_letter);
-
                 let mut cell = BytesStart::new("c");
-                cell.push_attribute(("r", cell_ref.as_str()));
+                cell.push_attribute(("r", format!("{}1", column_letters[col_idx]).as_str()));
 
                 writer.write_event(Event::Start(cell))?;
                 writer.write_event(Event::Start(BytesStart::new("is")))?;
@@ -71,18 +71,15 @@ impl SheetWriter {
         let max_len = self.columns.iter().map(|c| c.len()).max().unwrap_or(0);
         // Write data rows
         for row_idx in 0..max_len {
-            let excel_row = row_idx + header_offset; // Headers are row 1, data starts at 2
             let mut row = BytesStart::new("row");
+            let excel_row = row_idx + header_offset; // Headers are row 1, data starts at 2
             row.push_attribute(("r", excel_row.to_string().as_str()));
             writer.write_event(Event::Start(row))?;
 
             for (col_idx, column) in self.columns.iter().enumerate() {
                 if let Some(cell_data) = column.get(row_idx) {
-                    let col_letter = column_index_to_letter(col_idx);
-                    let cell_ref = format!("{}{}", col_letter, excel_row);
-
                     let mut cell = BytesStart::new("c");
-                    cell.push_attribute(("r", cell_ref.as_str()));
+                    cell.push_attribute(("r", format!("{}{}", column_letters[col_idx], excel_row).as_str()));
 
                     match cell_data {
                         CellData::String(s) => {
@@ -103,7 +100,7 @@ impl SheetWriter {
                             cell.push_attribute(("t", "b"));
                             writer.write_event(Event::Start(cell))?;
                             writer.write_event(Event::Start(BytesStart::new("v")))?;
-                            writer.write_event(Event::Text(BytesText::new(&format!("{}", if *b { 1 } else { 0 }))))?;
+                            writer.write_event(Event::Text(BytesText::new(if *b { "1" } else { "0" })))?;
                             writer.write_event(Event::End(BytesEnd::new("v")))?;
                         }
                     }
