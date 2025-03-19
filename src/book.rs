@@ -9,18 +9,13 @@ use zip::{CompressionMethod, ZipWriter};
 #[pyclass]
 pub struct BookWriter {
     sheet_writers: Vec<SheetWriter>,
-    zip_writer: ZipWriter<std::fs::File>,
 }
 
 #[pymethods]
 impl BookWriter {
     #[new]
-    fn new(name: &str) -> Self {
-        let file = std::fs::File::create(name).expect(&format!("create file {name} error!"));
-        BookWriter {
-            sheet_writers: Vec::new(),
-            zip_writer: ZipWriter::new(file),
-        }
+    fn new() -> Self {
+        BookWriter { sheet_writers: Vec::new() }
     }
 
     fn add_sheet(&mut self, name: &str, headers: Vec<String>) {
@@ -43,19 +38,53 @@ impl BookWriter {
         self.add_column(sheet_idx, cell_series);
     }
 
-    fn save(&mut self) {
-        self.write_content_types().expect("fail to write: [Content_Types].xml");
-        self.write_root_rels().expect("fail to write: _rels/.rels");
-        self.write_workbook().expect("failed to write: xl/workbook.xml");
-        self.write_styles().expect("failed to write: xl/styles.xml");
-        self.write_workbook_rels().expect("failed to write: xl/_rels/workbook.xml.rels");
-        self.write_sheets().expect("failed to write: xl/worksheets/sheet*.xml");
-        let unsafe_zip_writer = unsafe { std::ptr::read(&mut self.zip_writer) }; // in order must use `&must self` for pyo3
-        unsafe_zip_writer.finish().expect("failed to save file");
+    fn save(&mut self, name: &str) {
+        if let Err(e) = self.write_xlsx(name) {
+            eprintln!("Operation failed: {:?}", e);
+        }
     }
 }
 
 impl BookWriter {
+    fn write_xlsx(&mut self, name: &str) -> Result<(), std::io::Error> {
+        let file = std::fs::File::create(name).expect(&format!("create file {name} error!"));
+        let mut zip_writer = ZipWriter::new(file);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+        // [Content_Types].xml
+        let content_types = self.write_content_types().expect("fail to write: [Content_Types].xml");
+        zip_writer.start_file("[Content_Types].xml", options)?;
+        zip_writer.write_all(&content_types)?;
+
+        // _rels/.rels
+        let root_rels = self.write_root_rels().expect("fail to write: _rels/.rels");
+        zip_writer.start_file("_rels/.rels", options)?;
+        zip_writer.write_all(&root_rels)?;
+
+        // xl/workbook.xml
+        let workbook_xml = self.write_workbook().expect("failed to write: xl/workbook.xml");
+        zip_writer.start_file("xl/workbook.xml", options)?;
+        zip_writer.write_all(&workbook_xml)?;
+
+        // xl/styles.xml
+        let styles = self.write_styles().expect("failed to write: xl/styles.xml");
+        zip_writer.start_file("xl/styles.xml", options)?;
+        zip_writer.write_all(&styles)?;
+
+        // xl/_rels/workbook.xml.rels
+        let workbook_rels = self.write_workbook_rels().expect("failed to write: xl/_rels/workbook.xml.rels");
+        zip_writer.start_file("xl/_rels/workbook.xml.rels", options)?;
+        zip_writer.write_all(&workbook_rels)?;
+
+        // xl/worksheets/sheet*.xml
+        for (sheet_idx, sheet_writer) in self.sheet_writers.iter().enumerate() {
+            zip_writer.start_file(&format!("xl/worksheets/sheet{}.xml", sheet_idx + 1), options)?;
+            zip_writer.write_all(&sheet_writer.generate_xml()?)?;
+        }
+        zip_writer.finish()?;
+        Ok(())
+    }
+
     fn add_column(&mut self, sheet_idx: usize, series: Vec<CellData>) {
         if let Some(sheet_writer) = self.sheet_writers.get_mut(sheet_idx) {
             sheet_writer.add_column(series);
@@ -64,7 +93,7 @@ impl BookWriter {
         }
     }
 
-    fn write_styles(&mut self) -> Result<(), std::io::Error> {
+    fn write_styles(&mut self) -> Result<Vec<u8>, std::io::Error> {
         let mut writer = Writer::new(Vec::new());
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
 
@@ -72,17 +101,10 @@ impl BookWriter {
         root.push_attribute(("xmlns", "http://schemas.openxmlformats.org/spreadsheetml/2006/main"));
         writer.write_event(Event::Start(root))?;
         writer.write_event(Event::End(BytesEnd::new("styleSheet")))?;
-
-        // write styles
-        self.zip_writer.start_file(
-            "xl/styles.xml",
-            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
-        )?;
-        self.zip_writer.write_all(&writer.into_inner())?;
-        Ok(())
+        Ok(writer.into_inner())
     }
 
-    fn write_root_rels(&mut self) -> Result<(), std::io::Error> {
+    fn write_root_rels(&mut self) -> Result<Vec<u8>, std::io::Error> {
         let mut writer = Writer::new(Vec::new());
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
 
@@ -99,17 +121,10 @@ impl BookWriter {
         ])))?;
 
         writer.write_event(Event::End(BytesEnd::new("Relationships")))?;
-
-        // write relationships
-        self.zip_writer.start_file(
-            "_rels/.rels",
-            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
-        )?;
-        self.zip_writer.write_all(&writer.into_inner())?;
-        Ok(())
+        Ok(writer.into_inner())
     }
 
-    fn write_content_types(&mut self) -> Result<(), std::io::Error> {
+    fn write_content_types(&mut self) -> Result<Vec<u8>, std::io::Error> {
         let mut writer = Writer::new(Vec::new());
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
 
@@ -141,17 +156,10 @@ impl BookWriter {
         }
 
         writer.write_event(Event::End(BytesEnd::new("Types")))?;
-
-        // write workbook.xml
-        self.zip_writer.start_file(
-            "[Content_Types].xml",
-            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
-        )?;
-        self.zip_writer.write_all(&writer.into_inner())?;
-        Ok(())
+        Ok(writer.into_inner())
     }
 
-    fn write_workbook_rels(&mut self) -> Result<(), std::io::Error> {
+    fn write_workbook_rels(&mut self) -> Result<Vec<u8>, std::io::Error> {
         let mut writer = Writer::new(Vec::new());
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
 
@@ -169,17 +177,10 @@ impl BookWriter {
         }
 
         writer.write_event(Event::End(BytesEnd::new("Relationships")))?;
-
-        // write workbook.xml.rels
-        self.zip_writer.start_file(
-            "xl/_rels/workbook.xml.rels",
-            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
-        )?;
-        self.zip_writer.write_all(&writer.into_inner())?;
-        Ok(())
+        Ok(writer.into_inner())
     }
 
-    fn write_workbook(&mut self) -> Result<(), std::io::Error> {
+    fn write_workbook(&mut self) -> Result<Vec<u8>, std::io::Error> {
         let mut writer = Writer::new(Vec::new());
         writer.write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), Some("yes"))))?;
 
@@ -201,24 +202,6 @@ impl BookWriter {
 
         writer.write_event(Event::End(BytesEnd::new("sheets")))?;
         writer.write_event(Event::End(BytesEnd::new("workbook")))?;
-
-        // write workbook.xml
-        self.zip_writer.start_file(
-            "xl/workbook.xml",
-            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
-        )?;
-        self.zip_writer.write_all(&writer.into_inner())?;
-        Ok(())
-    }
-
-    fn write_sheets(&mut self) -> Result<(), std::io::Error> {
-        for (sheet_idx, sheet_writer) in self.sheet_writers.iter().enumerate() {
-            self.zip_writer.start_file(
-                &format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
-                SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
-            )?;
-            self.zip_writer.write_all(&sheet_writer.generate_xml()?)?;
-        }
-        Ok(())
+        Ok(writer.into_inner())
     }
 }

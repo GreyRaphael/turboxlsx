@@ -25,7 +25,7 @@ impl SheetWriter {
 
     pub fn add_column(&mut self, data: Vec<CellData>) {
         self.columns.push(data);
-        println!("add data to sheet: {}", self.name);
+        // println!("add data to sheet: {}", self.name);
     }
 
     pub fn generate_xml(&self) -> Result<Vec<u8>, std::io::Error> {
